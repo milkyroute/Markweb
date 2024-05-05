@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Markweb syntax highlighting for Gtksourceview.
+	Author: Milkyroute
+	Public domain
+-->
+<language id="markweb" name="Markweb" version="2.0" _section="Markup">
+  <metadata>
+    <property name="mimetypes">text/x-markweb</property>
+    <property name="globs">*.markweb;*.mw</property>
+    <property name="block-comment-start">&lt;!--</property>
+    <property name="block-comment-end">--&gt;</property>
+  </metadata>
+
+  <styles>
+    <style id="at" name="At" map-to="def:type"/>
+    <style id="ref" name="Reference" map-to="def:identifier"/>
+    <style id="subreference" name="Subreference" map-to="def:floating-point"/>
+  </styles>
+
+  <definitions>
+    
+    <define-regex id="subreference">[.>]</define-regex>
+    <define-regex id="word">\w+</define-regex>
+    
+    <context id="markweb-code-ref">
+    	<match>(@)\{([^:{}]*)\}</match>
+    	<include>
+    		<context sub-pattern="1" style-ref="at"/>
+    		<context sub-pattern="2" style-ref="ref"/>
+    	</include>
+    </context>
+    
+    <context id="markweb-block">
+    	<start>^(@@@\*?)([^:$]*[^+:$])(\+?=$)</start>
+    	<end>^@@@$</end>
+    	<include>
+    		<context sub-pattern="1" where="start" style-ref="at"/>
+    		<context sub-pattern="2" where="start" style-ref="ref"/>
+			<context sub-pattern="0" where="end" style-ref="at"/>
+    		<context ref="cpp:cpp"/>
+    		<context ref="markweb-code-ref"/>
+    	</include>
+    </context>
+    
+    <context id="markweb-ref">
+    	<match>(@)([\w.>]*)</match>
+    	<include>
+    		<context sub-pattern="1" style-ref="at"/>
+    		<context sub-pattern="2" style-ref="ref"/>
+    	</include>
+    </context>
+    
+    
+    
+    <context id="markweb">
+    	<include>
+    		<context ref="markweb-block"/>
+    		<context ref="markweb-code-ref"/>
+    		<context ref="markweb-ref"/>
+ 
+  			<context ref="markdown:markdown"/>
+    	</include>
+    </context>
+    
+  </definitions>
+</language>
