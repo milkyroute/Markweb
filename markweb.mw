@@ -1,0 +1,271 @@
+# Markweb
+
+Markweb is a literate programing tool based on markdown. Its goal is to rejuvenate literate programing by using a more recent and easy-to-learn markup language than LaTeX, but with indexing support to allow create references and crosslinking inside the documentation. Its objective are to allow writing documentation and software at the same time. Markweb generates a proper markdown document that contains the document of the program as well as the program files ready to be compliled. The first supported language will be C++.
+
+Contrarily to CWEB, Markweb does not differenciate between weave and tangle: it calls both at the same time. This is because weave (the action of creating the documentation file) needs tangle (the action of creating the code files) to have the crosslinks and references.
+
+## Introduction
+
+Before beginning any work, the program will check the given console arguments for the source file to load. In C++, the arguments @main>argc and @main>argv contain the information given in the console. First, we put them in C++ objects.
+
+@@@Converting console arguments=
+	for(int i = 1; i < argc; i++) {
+		arguments.push_back(std::string(argv[i]));
+	}
+@@@
+
+If there is no arguments, this operation is not needed and the program must return an error. For this, we'll need to include `<iostream>`.
+
+@@@Includes=
+	#include <iostream>
+@@@
+
+@@@Not enough arguments=
+	std::cerr << "Not enough arguments given. You have to use \"markweb\"." << std::endl;
+	return 1;
+@@@
+
+When we're sure we have enough arguments, we open the file and reads its content. It is stored in a vector so the line can be indicated if there is an error.
+
+@@@Includes+=
+	#include <fstream>
+	#include <vector>
+@@@
+
+@@@File opening and reading=
+	std::ifstream input_file(arguments[0]);
+	@{Checking if the file has correctly been opened}
+	std::string buffer;
+	std::vector<std::string> lines;
+	while(!input_file.eof()) {
+		std::getline(input_file, buffer);
+		lines.push_back(buffer);
+	}
+@@@
+
+We need to check if the second argument is really a file.
+
+@@@Checking if the file has correctly been opened=
+	if(!input_file) {
+		std::cerr << "Can't open file \"" << arguments[1] << "\"." << std::endl;
+		return 2;
+	}
+@@@
+
+The introduction of the program can be summarized like this:
+
+@@@Loading=
+	std::vector<std::string> arguments;
+	if(argc >= 2) {
+		@{Converting console arguments}
+	} else {
+		@{Not enough arguments}
+	}
+	
+	@{File opening and reading}
+@@@
+
+As we'll see later, the main function is organized as follows:
+
+@@@Main=
+	int main(int argc, char* argv[]) {
+		@{Loading}
+		@{Tangle}
+		@{Weave}
+		return 0;
+	}
+@@@
+
+## Tangle
+
+This part of the program creates the C++ files from the markweb code. It parses code chunks and finally puts them together in the right order, one file at a time. Its steps are the following:
+
+@@@Tangle=
+	@{Parsing code chunks}
+	@{Reconstructing code and output}
+@@@
+
+### Parsing code chunks
+
+To parse the code chunks, we must first define how they are going to be stored. We'll first declare a structure defining a chunk.
+
+@@@Chunk structure=
+struct Chunk {
+	std::vector<std::vector<std::string>> content = std::vector<std::vector<std::string>>(1);
+	std::vector<int> lines = std::vector<int>();
+	std::string name = "";
+	bool complete = false; // If true, all referenced chunks have been replaced by their content.
+};
+@@@
+
+Then we can parse all chunks. 
+
+@@@Includes+=
+	#include <map>
+@@@
+
+@@@Parsing code chunks=
+	std::map<std::string, Chunk> chunks;
+	std::vector<std::string> files; //Used to store the chunks that define files. They are the root chunks.
+	std::string current_chunk = "";
+	int i = 1;
+	for(std::string const& line : lines) {
+		if(current_chunk != "") {
+			if(line == "@@@") { // End of the chunk
+				current_chunk = "";
+			} else { // Content of the chunk
+				chunks[current_chunk].content[chunks[current_chunk].content.size() - 1].push_back(line);
+			}
+		} else if(line.starts_with("@@@")) { // Beginning of a chunk
+			if(line.ends_with("+=")) {
+				@{Append to chunk}
+			} else if(line.ends_with("=")) {
+				@{Create new chunk}
+			} else {
+				std::cerr << "[ERROR] At line " << i << ": unknown code chunk suffix." << std::endl;
+				return 3;
+			}
+		}
+		i++;
+	}
+@@@
+
+When a new chunk is found, we need to parse its name and create the object.
+
+@@@Create new chunk=
+	Chunk c;
+	c.name = std::regex_replace(line.substr(3), std::regex("="), "");
+	if(c.name.starts_with("*")) {// If file chunk
+		c.name = c.name.substr(1);
+		files.push_back(c.name);
+	}
+	c.lines.push_back(i);
+	chunks[c.name] = c;
+	current_chunk = c.name;
+@@@
+
+If the code chunk ends with `+=`, it appends code to an existing chunk instead of creating a new one.
+
+@@@Append to chunk=
+	std::string cname = std::regex_replace(line.substr(line.starts_with("@@@*") ? 4 : 3), std::regex("\\+="), "");
+	if(!chunks.contains(cname)) {
+		std::cerr << "[ERROR] At line " << i << ": unknown code chunk to append to." << std::endl;
+		return 3;
+	}
+	chunks[cname].lines.push_back(i);
+	chunks[cname].content.push_back(std::vector<std::string>());
+	current_chunk = cname;
+@@@
+
+At the end of this part, all chunks are stored in the @chunks map. The file chunks, that are going to be the roots from where we'll be reconstructing the code, are stored in the @files vector.
+
+### Reconstructing code
+
+Now, we need to reassemble the code from all chunks. In order to do this, we'll need recursion, so a separate function. It searches for chunk inclusions in the current chunk's content and replaces it with the included chunk's content. It also calls itself for the included chunk if it is not complete (see @Chunk.complete).
+
+@@@Includes+=
+	#include <regex>
+@@@
+
+@@@Constants=
+	const std::regex CODE_REFERENCE_REGEX("(@)\\{([^:]*)\\}"); 
+@@@
+
+@@@Tangle function=
+	bool tangle(std::string chunk_name, std::map<std::string, Chunk>& chunks, std::string file_name) {
+		int content_id = 0; /* Used to keep trace of which content declaration is being used */
+		for(std::vector<std::string>& sub_content : chunks[chunk_name].content) {
+			int line_id = 1;
+			for(std::string& line : sub_content) {
+				std::smatch match;
+				if(std::regex_search(line, match, CODE_REFERENCE_REGEX)) {
+					std::string cname = match[2].str();
+					if(chunks.contains(cname)) {
+						if(!chunks[cname].complete) {
+							if(!tangle(cname, chunks, file_name)) { // Propagates false if failure
+								std::cerr << "=> In chunk \"" << chunk_name << "\" at line " << chunks[chunk_name].lines[content_id] + line_id << "." << std::endl;
+								return false;
+							}
+						}
+						@{Replace line with chunk content}
+					} else {
+						std::cerr << "[ERROR] In chunk \"" << chunk_name << "\" at line " << chunks[chunk_name].lines[content_id] + line_id << ": unknown reference to chunk named \"" << cname << "\"" << std::endl;
+						return false;
+					}
+				}
+				line_id++;
+			}
+			content_id++;
+		}
+		chunks[chunk_name].complete = true;
+		return true;
+	}
+@@@
+
+To replace the chunk inclusion line by the included chunk's content, the program must first compile all the chunk's lines into one string.
+
+@@@Replace line with chunk content=
+	line = "";
+	Chunk included_chunk = chunks[cname];
+	int sub_content_id = 0;
+	for(std::vector<std::string> const& sub_content : included_chunk.content) {
+		line += "#line " + std::to_string(included_chunk.lines[sub_content_id] + 1) + " \"" + file_name + "\"\n";
+		for(std::string const& ic_line : sub_content) {
+			line += ic_line + "\n";
+		}
+		line += "#line " + std::to_string(chunks[chunk_name].lines[content_id] + line_id + 1) + " \"" + file_name + "\"\n";
+		sub_content_id++;
+	}
+@@@
+
+Now, we need to call this function from @{Tangle} in @{Reconstructing code} on each file.
+
+@@@Reconstructing code and output=
+	for(std::string const& file : files) {
+		if(!tangle(file, chunks, arguments[0])) {
+			std::cerr << "[ERROR] Tangle aborted for file \"" << file << "\". See error above." << std::endl;
+			return 4;
+		}
+		@{Tangle output}
+	}
+@@@
+
+Creating the file is a more straightforward process.
+
+@@@Tangle output=
+	std::ofstream output_file(file);
+	if(!output_file) {
+		std::cerr << "[ERROR] At line " << chunks[file].lines[0] << ": can't open output file \"" << file << "\"." << std::endl;
+		return 5;
+	}
+	for(std::vector<std::string> const& sub_content : chunks[file].content) {
+		for(std::string const& line : sub_content) {
+			output_file << line << std::endl;
+		}
+	}
+	output_file.close();
+@@@
+
+The source files are now created and ready to be compiled.
+
+## Weave function
+
+TODO
+
+@@@Weave=
+	// TODO
+@@@
+
+## Final structure
+
+At the end, the main file of the program is organized as follows.
+
+@@@*markweb.cpp=
+	@{Includes}
+	@{Constants}
+	
+	@{Chunk structure}
+	@{Tangle function}
+	
+	@{Main}
+@@@
