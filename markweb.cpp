@@ -1,20 +1,20 @@
 #line 20 "markweb.mw"
 	#include <iostream>
-#line 265 "markweb.mw"
+#line 334 "markweb.mw"
 #line 31 "markweb.mw"
 	#include <fstream>
 	#include <vector>
-#line 265 "markweb.mw"
+#line 334 "markweb.mw"
 #line 104 "markweb.mw"
 	#include <map>
-#line 265 "markweb.mw"
+#line 334 "markweb.mw"
 #line 167 "markweb.mw"
 	#include <regex>
-#line 265 "markweb.mw"
+#line 334 "markweb.mw"
 
 #line 171 "markweb.mw"
 	const std::regex CODE_REFERENCE_REGEX("(@)\\{([^:]*)\\}"); 
-#line 266 "markweb.mw"
+#line 335 "markweb.mw"
 
 	
 #line 93 "markweb.mw"
@@ -24,7 +24,7 @@ struct Chunk {
 	std::string name = "";
 	bool complete = false; // If true, all referenced chunks have been replaced by their content.
 };
-#line 268 "markweb.mw"
+#line 337 "markweb.mw"
 
 #line 175 "markweb.mw"
 	bool tangle(std::string chunk_name, std::map<std::string, Chunk>& chunks, std::string file_name) {
@@ -68,7 +68,7 @@ struct Chunk {
 		chunks[chunk_name].complete = true;
 		return true;
 	}
-#line 269 "markweb.mw"
+#line 338 "markweb.mw"
 
 	
 #line 71 "markweb.mw"
@@ -183,10 +183,51 @@ struct Chunk {
 #line 74 "markweb.mw"
 
 #line 256 "markweb.mw"
-	// TODO
+#line 315 "markweb.mw"
+	std::ofstream weave_output(std::regex_replace("doc_" + arguments[0], std::regex(".mw"), ".md"));
+	if(!weave_output) {
+		std::cerr << "[ERROR] Can't open documentation output file. Documentation will not be created." << std::endl;
+		return 5;
+	}
+#line 257 "markweb.mw"
+
+	bool in_code_chunk = false;
+	for(std::string& line : lines) {
+#line 270 "markweb.mw"
+	std::smatch match;
+	bool code_chunk_delimiter = std::regex_search(line, match, std::regex("^\\s*@@@"));
+	if(code_chunk_delimiter && !in_code_chunk) {
+		line = std::regex_replace(line, std::regex("^\\s*@@@\\*?"), "###### ");
+		line = std::regex_replace(line, std::regex("\\+?="), "\n```cpp");
+		in_code_chunk = true;
+	} else if(code_chunk_delimiter && in_code_chunk) {
+		line = "```";
+		in_code_chunk = false;
+#line 293 "markweb.mw"
+	/* TODO */
+#line 280 "markweb.mw"
+
+#line 297 "markweb.mw"
+	/* TODO */
+#line 281 "markweb.mw"
+
+	} else if(in_code_chunk) {
+		line = std::regex_replace(line, std::regex("^\t"), "");
+	}
+#line 260 "markweb.mw"
+
+#line 307 "markweb.mw"
+	/* TODO */
+#line 261 "markweb.mw"
+
+#line 325 "markweb.mw"
+	weave_output << line << std::endl;
+#line 262 "markweb.mw"
+
+	}
 #line 75 "markweb.mw"
 
 		return 0;
 	}
-#line 271 "markweb.mw"
+#line 340 "markweb.mw"
 

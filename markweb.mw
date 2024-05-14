@@ -250,10 +250,79 @@ The source files are now created and ready to be compiled.
 
 ## Weave function
 
-TODO
+The weave function has three goals: change markweb code chunks to markdown ones, link references to their definition (code chunks and variables) and list code objects definitions below code chunks. For this, we read again the file, line by line, and format the different elements. To avoid reading the file multiple times, each line is written just after it's proccessed.
 
 @@@Weave=
-	// TODO
+	@{Open weave output file}
+	bool in_code_chunk = false;
+	for(std::string& line : lines) {
+		@{Format code chunks}
+		@{Link text references}
+		@{Weave output}
+	}
+@@@
+
+### Format code chunks
+
+This step is quite simple, we only need to replace the markweb format with the markdown one. The code chunks are named with a h6 header.
+
+@@@Format code chunks=
+	std::smatch match;
+	bool code_chunk_delimiter = std::regex_search(line, match, std::regex("^\\s*@@@"));
+	if(code_chunk_delimiter && !in_code_chunk) {
+		line = std::regex_replace(line, std::regex("^\\s*@@@\\*?"), "###### ");
+		line = std::regex_replace(line, std::regex("\\+?="), "\n```cpp");
+		in_code_chunk = true;
+	} else if(code_chunk_delimiter && in_code_chunk) {
+		line = "```";
+		in_code_chunk = false;
+		@{List definitions}
+		@{List code references}
+	} else if(in_code_chunk) {
+		line = std::regex_replace(line, std::regex("^\t"), "");
+	}
+@@@
+
+### Listing
+
+For convinience, a lot of links are put below the code chunk. In order: the defined code objects, the code chunks included then the code objects used.
+
+TODO
+
+@@@List definitions=
+	/* TODO */
+@@@
+
+@@@List code references=
+	/* TODO */
+@@@
+
+### Link references
+
+This step is done in two sub-steps. First, we need to reference the code chunks, and then the code objects. 
+
+TODO
+
+@@@Link text references=
+	/* TODO */
+@@@
+
+### Writing output file
+
+This step only consists in writing each line of the file. First we open the file and check if there is any problems.
+
+@@@Open weave output file=
+	std::ofstream weave_output(std::regex_replace("doc_" + arguments[0], std::regex(".mw"), ".md"));
+	if(!weave_output) {
+		std::cerr << "[ERROR] Can't open documentation output file. Documentation will not be created." << std::endl;
+		return 5;
+	}
+@@@
+
+Then we simply write each line at the end of processing.
+
+@@@Weave output=
+	weave_output << line << std::endl;
 @@@
 
 ## Final structure
